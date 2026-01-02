@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class-Based Visual IDE</title>
+	<script src="src/main.mjs" type="module"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #252526;
+            --header-bg: #333333;
+            --text-color: #cccccc;
+            --accent: #007acc;
+            --grid-line: #2d2d2d;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        * { box-sizing: border-box; user-select: none; }
+        
+        body { margin: 0; padding: 0; background: var(--bg-color); color: var(--text-color); font-family: var(--font-main); overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+        /* --- LAYOUT --- */
+        #toolbar { height: 40px; background: var(--header-bg); display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid #000; z-index: 10; }
+        #workspace { flex: 1; display: flex; position: relative; overflow: hidden; }
+        
+        .panel { background: var(--panel-bg); display: flex; flex-direction: column; border: 1px solid #000; transition: width 0.1s; }
+        .panel-header { padding: 5px 10px; background: var(--header-bg); font-weight: bold; font-size: 12px; cursor: default; display: flex; justify-content: space-between; }
+        .panel-content { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        #left-dock { width: 250px; border-right: 1px solid #000; display: flex; flex-direction: column; }
+        #center-dock { flex: 1; position: relative; background: #111; }
+        #right-dock { width: 300px; border-left: 1px solid #000; }
+        #bottom-dock { height: 150px; border-top: 1px solid #000; position: absolute; bottom: 0; width: 100%; background: var(--panel-bg); transform: translateY(100%); transition: transform 0.2s; z-index: 5; }
+        #bottom-dock.open { transform: translateY(0); }
+
+        button { background: var(--header-bg); border: 1px solid #444; color: white; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+        button:hover { background: #444; }
+        
+        /* Category Menu */
+        .category-item { margin-bottom: 5px; }
+        .category-header { font-weight: bold; padding: 5px; background: #333; cursor: pointer; }
+        .block-item { padding: 5px 15px; cursor: grab; font-size: 13px; border-left: 2px solid transparent; }
+        .block-item:hover { background: #444; border-left-color: var(--accent); }
+
+        /* Popups / Overlays */
+        #code-editor-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
+        .editor-window { width: 80%; height: 80%; background: #1e1e1e; border: 1px solid #444; display: flex; flex-direction: column; box-shadow: 0 0 20px #000; }
+        textarea.code-area { flex: 1; background: #141414; color: #d4d4d4; border: none; padding: 10px; font-family: 'Consolas', monospace; resize: none; outline: none; }
+
+        #tooltip { position: absolute; background: #202020; border: 1px solid #444; padding: 4px 8px; font-size: 11px; color: #fff; pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 20; border-radius: 3px; }
+
+        /* Context Menu */
+        #context-menu {
+            display: none; position: absolute; background: #252526; border: 1px solid #444; 
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5); z-index: 100; min-width: 150px;
+        }
+        #context-menu div { padding: 8px 15px; cursor: pointer; font-size: 13px; color: #eee; }
+        #context-menu div:hover { background: #094771; }
+        #context-menu .separator { height: 1px; background: #444; padding: 0; margin: 4px 0; pointer-events: none; }
+
+        /* Floating Input for editing values on canvas */
+        .floating-input {
+            position: absolute; display: none; background: #111; color: #fff; 
+            border: 1px solid var(--accent); padding: 0 4px; font-family: 'Segoe UI', sans-serif;
+            font-size: 12px; z-index: 50; outline: none;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+        
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <button id="btn-run">▶ Run</button>
+        <button id="btn-export" style="margin-left: 5px;">Export Code</button>
+        <button id="btn-console" style="margin-left: auto;">Toggle Console</button>
+    </div>
+
+    <div id="workspace">
+        <div id="left-dock" class="panel">
+            <div class="panel-header">TOOLBOX</div>
+            <div class="panel-content" id="toolbox-content">
+                </div>
+        </div>
+
+        <div id="center-dock">
+            <canvas id="editor-canvas"></canvas>
+            <div id="tooltip"></div>
+            <input type="text" id="floating-input" class="floating-input">
+            <div id="context-menu"></div>
+        </div>
+
+        <div id="right-dock" class="panel">
+            <div class="panel-header">PROPERTIES / OUTPUT</div>
+            <div class="panel-content" id="properties-content">
+                <p style="color: #666; font-style: italic;">Select a block to view properties.</p>
+            </div>
+        </div>
+        
+        <div id="bottom-dock" class="panel">
+            <div class="panel-header">
+                <span>CONSOLE</span>
+                <button id="btn-close-console" style="border:none; background:none;">X</button>
+            </div>
+            <div class="panel-content" id="console-output" style="font-family: monospace; color: #ccc;"></div>
+        </div>
+    </div>
+
+    <div id="code-editor-overlay">
+        <div class="editor-window">
+            <div class="panel-header">
+                <span id="editor-title">Custom Code</span>
+                <button id="btn-save-code">Save & Close</button>
+            </div>
+            <textarea class="code-area" id="custom-code-input"></textarea>
+        </div>
+    </div>
+        </div>
+    </div>
+</body>
+</html>
