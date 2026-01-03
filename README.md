@@ -1,3 +1,4 @@
+![LOGO](https://github.com/WarmasterPrime/VEngine/blob/master/VEngine.png?raw=true)
 # VEngine – Class‑Based Visual Graph Engine
 
 VEngine is a **browser‑based, class‑driven visual programming / logic‑graph engine** built with modern **ES Modules (JavaScript)** and HTML5 Canvas concepts. It allows you to visually compose logic using **blocks (nodes)** connected by **wires**, then execute or evaluate the resulting graph.
